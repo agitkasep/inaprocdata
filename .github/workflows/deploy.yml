@@ -1,3 +1,4 @@
+
 name: Deploy React App
 on:
   push:
@@ -6,17 +7,19 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: Preview_Web  # Tambahkan baris ini
     steps:
       - uses: actions/checkout@v3
       - name: Install dependencies
+        working-directory: Preview_Web
         run: npm install
       - name: Build
+        working-directory: Preview_Web
         run: npm run build
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./Preview_Web/dist # Sesuaikan dengan folder hasil build
+          publish_dir: ./Preview_Web/dist
+          force_orphan: true
+          cname: inaprocdata.agitstudio.cloud
+
