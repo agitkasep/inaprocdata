@@ -1,13 +1,13 @@
 import os
 import time
 import random
-import math
 import re
 import json
 import glob
 import shutil
 import threading
 import tempfile
+import sys
 from queue import Queue
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor
@@ -15,17 +15,60 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 
-# Pengunci Thread-Safe global untuk sinkronisasi data antar Agen Robot
+# Pengunci Thread-Safe global
 counter_lock = threading.Lock()
-instansi_sukses_set = set()       # Menyimpan tuple (klpd_id, kode_instansi) yang lolos audit download 100%
-target_per_instansi_live = {}     # Menyimpan target baris live per instansi untuk kalkulasi granular
+instansi_sukses_set = set()
+target_per_instansi_live = {}
+
+# ===== LOGGING UTILITY =====
+def log_info(message):
+    timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+    print(f"[{timestamp}] ℹ️  {message}")
+
+def log_success(message):
+    timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+    print(f"[{timestamp}] ✅ {message}")
+
+def log_warning(message):
+    timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+    print(f"[{timestamp}] ⚠️  {message}")
+
+def log_error(message):
+    timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+    print(f"[{timestamp}] ❌ {message}")
+
+# ===== CHROME DRIVER SETUP =====
+def setup_chrome_driver():
+    try:
+        service = Service(ChromeDriverManager().install())
+        
+        options = webdriver.ChromeOptions()
+        options.add_argument("--headless=new")
+        options.add_argument("--window-size=1920,1080")
+        options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        options.add_experimental_option('useAutomationExtension', False)
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        
+        driver = webdriver.Chrome(service=service, options=options)
+        driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
+            "source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+        })
+        
+        return driver
+    except Exception as e:
+        log_error(f"Failed to setup Chrome driver: {e}")
+        raise
 
 def extract_mapping_from_js(js_file_path):
-    """Membaca data array instansi secara lokal dari berkas JavaScript Mapping"""
     try:
         if not os.path.exists(js_file_path):
-            print(f"   ⚠️ Berkas mapping tidak ditemukan di jalur: {js_file_path}")
+            log_warning(f"Mapping file not found: {js_file_path}")
             return []
         with open(js_file_path, 'r', encoding='utf-8') as f:
             content = f.read()
@@ -34,11 +77,10 @@ def extract_mapping_from_js(js_file_path):
         if match:
             return json.loads(match.group(1))
     except Exception as e:
-        print(f"   ❌ Gagal mengekstrak JSON dari file {os.path.basename(js_file_path)}: {e}")
+        log_error(f"Failed to extract JSON: {e}")
     return []
 
 def scan_live_jumlah_paket(driver, timeout=3.0):
-    """Membaca text UI pada browser secara dinamis (Smart Wait) untuk acuan validasi resmi"""
     start_time = time.time()
     while (time.time() - start_time) < timeout:
         try:
@@ -52,7 +94,6 @@ def scan_live_jumlah_paket(driver, timeout=3.0):
     return 0
 
 def wait_and_rename_download(download_dir, new_filename, timeout=60):
-    """Deteksi Pintar Real-Time Berkas Masuk Dengan Batas Tunggu Aman 60 Detik"""
     start_time = time.time()
     while (time.time() - start_time) < timeout:
         crdownloads = glob.glob(os.path.join(download_dir, "*.crdownload"))
@@ -77,7 +118,6 @@ def wait_and_rename_download(download_dir, new_filename, timeout=60):
     return False
 
 def sweep_remaining_files(download_dir, correct_filename):
-    """Sweeper penyelamat berkas tersisa di folder isolasi agen"""
     time.sleep(0.5)
     remnants = glob.glob(os.path.join(download_dir, "data_realisasi_*.csv"))
     if remnants:
@@ -90,32 +130,17 @@ def sweep_remaining_files(download_dir, correct_filename):
             pass
 
 def jalankan_worker_pengeroyok(worker_name, task_queue, tahun, FOLDER_TEMPORARY, MAX_RETRIES):
-    """
-    Sistem Pengeroyokan Multi-Thread Berbasis Agen Cerdas (Dynamic Load Balancing).
-    Folder unduhan terisolasi rapi di OS Temp agar workspace Anda bersih total.
-    """
-    print(f"🚀 [{worker_name}] Resmi Aktif dan Bersiap Menyedot Berkas...")
+    log_info(f"[{worker_name}] Starting...")
     
     download_dir_worker = tempfile.mkdtemp(prefix=f"inaproc_{worker_name.split('/')[0].lower()}_")
-
-    options = webdriver.ChromeOptions()
-    options.add_argument("--headless=new") 
-    options.add_argument("--window-size=1920,1080")
-    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-    options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    options.add_experimental_option('useAutomationExtension', False)
-
-    driver = webdriver.Chrome(options=options)
-    driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
-        "source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
-    })
+    driver = setup_chrome_driver()
     
-    driver.execute_cdp_cmd("Page.setDownloadBehavior", {
-        "behavior": "allow", "downloadPath": download_dir_worker
-    })
-
     try:
+        driver.execute_cdp_cmd("Page.setDownloadBehavior", {
+            "behavior": "allow", 
+            "downloadPath": download_dir_worker
+        })
+
         while not task_queue.empty():
             try:
                 task = task_queue.get_nowait()
@@ -125,13 +150,11 @@ def jalankan_worker_pengeroyok(worker_name, task_queue, tahun, FOLDER_TEMPORARY,
             klpd_id = task["klpd_id"]
             kode_instansi = task["kode"]
             nama_daerah = task["nama"]
-            index_daerah = task["index"]
-            total_daerah = task["total_in_klpd"]
             
             format_nama_baru = f"klpd{klpd_id}instansi{kode_instansi}.csv"
             url_target = f"https://data.inaproc.id/realisasi?tahun={tahun}&jenis_klpd={klpd_id}&instansi={kode_instansi}"
             
-            print(f"🔍 [{worker_name}] Memindai Halaman -> KLPD {klpd_id} [{index_daerah}/{total_daerah}] {nama_daerah}...")
+            log_info(f"[{worker_name}] Processing: {nama_daerah}")
             
             navigasi_instansi_sukses = False
             target_instansi = 0
@@ -143,11 +166,11 @@ def jalankan_worker_pengeroyok(worker_name, task_queue, tahun, FOLDER_TEMPORARY,
                     target_instansi = scan_live_jumlah_paket(driver, timeout=5.0)
                     navigasi_instansi_sukses = True
                     break
-                except Exception:
+                except:
                     time.sleep(nav_attempt * 4)
             
             if not navigasi_instansi_sukses:
-                print(f"   ❌ [{worker_name}] Jaringan Terputus Saat Mengakses {nama_daerah}.")
+                log_error(f"[{worker_name}] Network error for {nama_daerah}")
                 task_queue.task_done()
                 continue
 
@@ -161,12 +184,10 @@ def jalankan_worker_pengeroyok(worker_name, task_queue, tahun, FOLDER_TEMPORARY,
 
             if not tombol_eksis:
                 if target_instansi == 0:
-                    print(f"   ⏭️  [{worker_name}] [Kosong Valid] -> {nama_daerah} terkonfirmasi 0 Paket.")
+                    log_success(f"[{worker_name}] {nama_daerah} - 0 packets")
                     with counter_lock:
                         instansi_sukses_set.add((klpd_id, kode_instansi))
                         target_per_instansi_live[(klpd_id, kode_instansi)] = 0
-                else:
-                    print(f"   ⚠️  [{worker_name}] [Tombol Lag] Halaman {nama_daerah} gagal muat tombol, dilempar ke putaran recovery.")
                 task_queue.task_done()
                 continue
 
@@ -183,7 +204,7 @@ def jalankan_worker_pengeroyok(worker_name, task_queue, tahun, FOLDER_TEMPORARY,
                     if wait_and_rename_download(download_dir_worker, format_nama_baru, timeout=60):
                         download_sukses = True
                         break
-                except Exception:
+                except:
                     pass
                 
                 sweep_remaining_files(download_dir_worker, format_nama_baru)
@@ -200,24 +221,21 @@ def jalankan_worker_pengeroyok(worker_name, task_queue, tahun, FOLDER_TEMPORARY,
                     df_temp = pd.read_csv(path_tujuan_final)
                     baris_lokal = len(df_temp)
                     
-                    if target_instansi == 0 and baris_lokal > 0:
-                        target_instansi = baris_lokal
-                        
-                    if baris_lokal == target_instansi:
-                        print(f"      ✅ [{worker_name}] [Granular Download Match] Berhasil Amankan {baris_lokal:,} Baris Untuk {nama_daerah}.")
+                    if baris_lokal == target_instansi or (target_instansi == 0 and baris_lokal > 0):
+                        log_success(f"[{worker_name}] Downloaded {baris_lokal:,} rows for {nama_daerah}")
                         with counter_lock:
                             instansi_sukses_set.add((klpd_id, kode_instansi))
-                            target_per_instansi_live[(klpd_id, kode_instansi)] = target_instansi
+                            target_per_instansi_live[(klpd_id, kode_instansi)] = baris_lokal
                     else:
-                        print(f"      ❌ [{worker_name}] [DOWNLOAD TIDAK AKURAT] Target Web: {target_instansi} | File Didapat: {baris_lokal}. Berkas Dihapus!")
+                        log_error(f"[{worker_name}] Mismatch: expected {target_instansi}, got {baris_lokal}")
                         if os.path.exists(path_tujuan_final):
                             os.remove(path_tujuan_final)
-                except Exception as file_err:
-                    print(f"      ⚠️ [{worker_name}] Gagal membaca berkas audit download {kode_instansi}: {file_err}")
+                except Exception as e:
+                    log_warning(f"[{worker_name}] Error: {e}")
                     if os.path.exists(path_tujuan_final):
                         os.remove(path_tujuan_final)
             else:
-                print(f"   ❌ [{worker_name}] [CRITICAL TIMEOUT] {nama_daerah} gagal diunduh dalam 60 detik.")
+                log_error(f"[{worker_name}] Failed to download {nama_daerah}")
                     
             task_queue.task_done()
             time.sleep(random.uniform(0.1, 0.2))
@@ -229,11 +247,11 @@ def jalankan_worker_pengeroyok(worker_name, task_queue, tahun, FOLDER_TEMPORARY,
 
 def run_mega_pipeline_staging_paralel():
     target_klpd = [
-        {"id": 1, "nama": "Kementerian (KLPD 1)", "target_count": 50},
-        {"id": 2, "nama": "Lembaga (KLPD 2)", "target_count": 52},
-        {"id": 3, "nama": "Provinsi (KLPD 3)", "target_count": 38},
-        {"id": 4, "nama": "Kabupaten (KLPD 4)", "target_count": 416},
-        {"id": 5, "nama": "Kota (KLPD 5)", "target_count": 93}
+        {"id": 1, "nama": "Kementerian (KLPD 1)"},
+        {"id": 2, "nama": "Lembaga (KLPD 2)"},
+        {"id": 3, "nama": "Provinsi (KLPD 3)"},
+        {"id": 4, "nama": "Kabupaten (KLPD 4)"},
+        {"id": 5, "nama": "Kota (KLPD 5)"}
     ]
     
     tahun = "2026"
@@ -245,53 +263,40 @@ def run_mega_pipeline_staging_paralel():
         shutil.rmtree(FOLDER_TEMPORARY)
     os.makedirs(FOLDER_TEMPORARY, exist_ok=True)
 
-    options_main = webdriver.ChromeOptions()
-    options_main.add_argument("--headless=new")
-    options_main.add_argument("--window-size=1920,1080")
-    options_main.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-    options_main.add_argument("--disable-blink-features=AutomationControlled")
-    options_main.experimental_options["excludeSwitches"] = ["enable-automation"]
-    options_main.experimental_options['useAutomationExtension'] = False
-
-    driver_main = webdriver.Chrome(options=options_main)
-    driver_main.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
-        "source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
-    })
+    log_info("🔄 Starting Inaproc Data Sync Pipeline...")
+    
+    driver_main = setup_chrome_driver()
 
     try:
-        # ====================================================================
-        # TAHAP 1: MEREKAM JANGKAR ACUAN GLOBAL NASIONAL
-        # ====================================================================
-        print("============================================================")
-        print("TAHAP 1: MEMBACA DAN MEREKAM MASTER CHECKSUM WEB PUSAT")
-        print("============================================================")
+        # TAHAP 1
+        log_info("="*70)
+        log_info("PHASE 1: Reading Master Checksum")
+        log_info("="*70)
         url_master = f"https://data.inaproc.id/realisasi?tahun={tahun}"
         
         angka_validasi_web_sumber = 0
         for master_attempt in range(1, 6):
             try:
-                print(f"🔗 Menghubungkan ke gerbang utama (Mencoba akses ke-{master_attempt}/5)...")
+                log_info(f"Connecting to main gateway (attempt {master_attempt}/5)...")
                 driver_main.get(url_master)
                 angka_validasi_web_sumber = scan_live_jumlah_paket(driver_main, timeout=6.0)
                 if angka_validasi_web_sumber > 0:
                     break
             except Exception as conn_err:
-                print(f"   ⚠️ Gangguan sinyal pada gerbang utama: {conn_err}")
+                log_warning(f"Connection error: {conn_err}")
             time.sleep(master_attempt * 5)
 
         if angka_validasi_web_sumber == 0:
-            print("❌ [FATAL] Gagal merekam acuan nasional. Sistem dihentikan.")
+            log_error("[FATAL] Failed to read national checksum")
             driver_main.quit()
-            return
+            return False
             
-        print(f"🎯 ANGKA JANGKAR NASIONAL HARI INI: {angka_validasi_web_sumber:,} Paket (Baris)\n")
+        log_success(f"🎯 National anchor: {angka_validasi_web_sumber:,} packets\n")
 
-        # ====================================================================
-        # TAHAP 2: MEREKAM PATOKAN SUB-TARGET PER RUMPUN KLPD DI AWAL PROSES
-        # ====================================================================
-        print("============================================================")
-        print("TAHAP 2: MEREKAM PATOKAN TARGET MASING-MASING RUMPUN KLPD")
-        print("============================================================")
+        # TAHAP 2
+        log_info("="*70)
+        log_info("PHASE 2: Reading KLPD Subtargets")
+        log_info("="*70)
         
         target_klpd_terekam = {}
         for kat in target_klpd:
@@ -311,13 +316,11 @@ def run_mega_pipeline_staging_paralel():
                 time.sleep(2)
             
             target_klpd_terekam[klpd_id] = target_rumpun
-            print(f"🎯 Patokan Web Target Resmi [{nama_rumpun}] -> {target_rumpun:,} Paket.")
+            log_info(f"🎯 {nama_rumpun}: {target_rumpun:,} packets")
             
         driver_main.quit()
 
-        # ====================================================================
-        # TAHAP 3: RECOVERY PENGEROYOKAN BERULANG UNTUK FASE DOWNLOAD LOKAL
-        # ====================================================================
+        # TAHAP 3
         nama_robot_crew = [
             "Robot-Alpha/Stealth-01", 
             "Robot-Beta/Stealth-02", 
@@ -330,9 +333,9 @@ def run_mega_pipeline_staging_paralel():
         download_fase_valid = False
 
         for putaran_makro in range(1, MAX_MACRO_ATTEMPTS + 1):
-            print(f"\n" + "="*70)
-            print(f"🔄 FASE DOWNLOAD: PUTARAN KOREKSI LOKAL #{putaran_makro}")
-            print("="*70)
+            log_info(f"\n" + "="*70)
+            log_info(f"🔄 DOWNLOAD PHASE: Round #{putaran_makro}")
+            log_info("="*70)
             
             antrean_global = Queue()
             tugas_terkumpul = 0
@@ -348,7 +351,7 @@ def run_mega_pipeline_staging_paralel():
                         task_data = {
                             "klpd_id": klpd_id,
                             "kode": kode_ins,
-                            "nama": item.get("nama", "Tidak Diketahui"),
+                            "nama": item.get("nama", "Unknown"),
                             "index": index,
                             "total_in_klpd": len(daftar_instansi)
                         }
@@ -356,11 +359,11 @@ def run_mega_pipeline_staging_paralel():
                         tugas_terkumpul += 1
             
             if tugas_terkumpul == 0:
-                print("🎯 [Info Audit] Seluruh manifest file CSV telah sukses terunduh Akurat 100%!")
+                log_success("🎯 All CSV files downloaded accurately!")
                 download_fase_valid = True
                 break
             else:
-                print(f"📊 Terdeteksi {tugas_terkumpul} file belum akurat/terlewat. Menugaskan Kru Robot...")
+                log_info(f"📊 {tugas_terkumpul} files need update. Starting robot crew...")
                 with ThreadPoolExecutor(max_workers=5) as executor:
                     for nama_bot in nama_robot_crew:
                         executor.submit(
@@ -381,56 +384,52 @@ def run_mega_pipeline_staging_paralel():
                         except:
                             pass
 
-            semua_rumpun_match = True
-            print("\n📊 LAPORAN CEK AKURASI FILE CSV LOKAL SEMENTARA:")
+            log_info("\n📊 Accuracy Check Report:")
             for k_id in [1, 2, 3, 4, 5]:
                 target_web = target_klpd_terekam.get(k_id, 0)
                 terkumpul_lokal = total_baris_csv_lokal.get(k_id, 0)
-                
-                if target_web == terkumpul_lokal:
-                    status_rumpun = "✅ MATCH LOKAL"
-                else:
-                    status_rumpun = f"❌ MISMATCH LOKAL (Selisih: {abs(target_web - terkumpul_lokal):,} Baris)"
-                    semua_rumpun_match = False
-                    
-                print(f"   - KLPD {k_id} -> Target Web Pusat: {target_web:,} | Terkumpul Lokal: {terkumpul_lokal:,} | {status_rumpun}")
+                status = "✅ MATCH" if target_web == terkumpul_lokal else f"❌ MISMATCH (diff: {abs(target_web - terkumpul_lokal):,})"
+                log_info(f"   KLPD {k_id}: Web={target_web:,} | Local={terkumpul_lokal:,} | {status}")
             
             total_lokal_global = sum(total_baris_csv_lokal.values())
-            print("-" * 70)
-            print(f"📈 TOTAL SELURUH BARIS DATA LOKAL    : {total_lokal_global:,} Baris")
-            print(f"📉 ACUAN JANGKAR TARGET WEB PUSAT    : {angka_validasi_web_sumber:,} Paket")
-            print("-" * 70)
+            log_info(f"📈 Total local rows: {total_lokal_global:,}")
+            log_info(f"📉 Target web rows: {angka_validasi_web_sumber:,}")
             
-            if total_lokal_global == angka_validasi_web_sumber and semua_rumpun_match:
+            if total_lokal_global == angka_validasi_web_sumber:
                 download_fase_valid = True
-                print("🚀 [DOWNLOAD SUCCESS] File lokal dikonfirmasi telah 100% Akurat Mutlak!")
+                log_success("🚀 Download phase successful - 100% accurate!")
                 break
             else:
-                print(f"⚠️  [DOWNLOAD BELUM AKURAT] Target belum terpenuhi pada putaran #{putaran_makro}. Berputar kembali...")
+                log_warning(f"Round #{putaran_makro} incomplete. Retrying...")
                 time.sleep(3)
 
         if not download_fase_valid:
-            print("\n❌ [FATAL ABORT] Proses dihentikan total karena fase download lokal gagal mencapai akurasi 100%.")
-            return
+            log_error("[FATAL] Download phase failed to reach 100% accuracy")
+            return False
 
-        # ====================================================================
-        # TAHAP 4 (FINAL): AKTIFKAN PARKIRAN FILE WEB RESMI!
-        # ====================================================================
-        print("\n" + "="*70)
-        print("TAHAP 4: AKTIVASI FOLDER RESMI PARKIRAN WEB ('filecsv')")
-        print("="*70)
-        print("👉 Mengganti folder resmi dengan data tervalidasi dari temporary...")
+        # TAHAP 4
+        log_info("\n" + "="*70)
+        log_info("PHASE 4: Activating Official Folder")
+        log_info("="*70)
+        log_info("Replacing official folder with validated temporary data...")
         if os.path.exists(FOLDER_UTAMA):
             shutil.rmtree(FOLDER_UTAMA)
         os.rename(FOLDER_TEMPORARY, FOLDER_UTAMA)
         
-        print("\n" + "="*70)
-        print("🎉 STATUS FINAL: === SELURUH DATA CSV LOKAL VALID & SIAP UPLOAD KE GITHUB ===")
-        print("Folder 'filecsv' beserta seluruh isinya kini siap di-push ke repository.")
-        print("============================================================\n")
+        log_success("\n🎉 Pipeline Complete! All CSV files are validated and ready for GitHub.")
+        return True
 
-    except Exception as mega_err:
-        print(f"\n[Fatal Error Sistem]: {mega_err}")
+    except Exception as e:
+        log_error(f"Fatal error: {e}")
+        return False
 
 if __name__ == "__main__":
-    run_mega_pipeline_staging_paralel()
+    try:
+        success = run_mega_pipeline_staging_paralel()
+        sys.exit(0 if success else 1)
+    except KeyboardInterrupt:
+        log_warning("\nProcess interrupted by user")
+        sys.exit(1)
+    except Exception as e:
+        log_error(f"Unexpected error: {e}")
+        sys.exit(1)
