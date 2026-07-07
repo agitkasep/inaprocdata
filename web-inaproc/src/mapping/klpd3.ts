@@ -1,0 +1,45 @@
+export interface Province {
+  nama: string;
+  kode: string;
+}
+
+export const PROVINCES: Province[] = [
+  { "nama": "ACEH", "kode": "D1" },
+  { "nama": "PROVINSI BALI", "kode": "D25" },
+  { "nama": "PROVINSI BANGKA BELITUNG", "kode": "D35" },
+  { "nama": "PROVINSI BANTEN", "kode": "D43" },
+  { "nama": "PROVINSI BENGKULU", "kode": "D52" },
+  { "nama": "PROVINSI DI YOGYAKARTA", "kode": "D63" },
+  { "nama": "PROVINSI DKI JAKARTA", "kode": "D69" },
+  { "nama": "PROVINSI GORONTALO", "kode": "D76" },
+  { "nama": "PROVINSI JAMBI", "kode": "D83" },
+  { "nama": "PROVINSI JAWA BARAT", "kode": "D95" },
+  { "nama": "PROVINSI JAWA TENGAH", "kode": "D122" },
+  { "nama": "PROVINSI JAWA TIMUR", "kode": "D158" },
+  { "nama": "PROVINSI KALIMANTAN BARAT", "kode": "D197" },
+  { "nama": "PROVINSI KALIMANTAN SELATAN", "kode": "D212" },
+  { "nama": "PROVINSI KALIMANTAN TENGAH", "kode": "D226" },
+  { "nama": "PROVINSI KALIMANTAN TIMUR", "kode": "D241" },
+  { "nama": "PROVINSI KALIMANTAN UTARA", "kode": "D533" },
+  { "nama": "PROVINSI KEPULAUAN RIAU", "kode": "D256" },
+  { "nama": "PROVINSI LAMPUNG", "kode": "D264" },
+  { "nama": "PROVINSI MALUKU", "kode": "D279" },
+  { "nama": "PROVINSI MALUKU UTARA", "kode": "D291" },
+  { "nama": "PROVINSI NUSA TENGGARA BARAT", "kode": "D301" },
+  { "nama": "PROVINSI NUSA TENGGARA TIMUR", "kode": "D312" },
+  { "nama": "PROVINSI PAPUA", "kode": "D334" },
+  { "nama": "PROVINSI PAPUA BARAT", "kode": "D364" },
+  { "nama": "PROVINSI PAPUA BARAT DAYA", "kode": "D1004" },
+  { "nama": "PROVINSI PAPUA PEGUNUNGAN", "kode": "D1005" },
+  { "nama": "PROVINSI PAPUA SELATAN", "kode": "D1003" },
+  { "nama": "PROVINSI PAPUA TENGAH", "kode": "D1002" },
+  { "nama": "PROVINSI RIAU", "kode": "D376" },
+  { "nama": "PROVINSI SULAWESI BARAT", "kode": "D389" },
+  { "nama": "PROVINSI SULAWESI SELATAN", "kode": "D395" },
+  { "nama": "PROVINSI SULAWESI TENGAH", "kode": "D421" },
+  { "nama": "PROVINSI SULAWESI TENGGARA", "kode": "D433" },
+  { "nama": "PROVINSI SULAWESI UTARA", "kode": "D446" },
+  { "nama": "PROVINSI SUMATERA BARAT", "kode": "D462" },
+  { "nama": "PROVINSI SUMATERA SELATAN", "kode": "D482" },
+  { "nama": "PROVINSI SUMATERA UTARA", "kode": "D498" }
+];
