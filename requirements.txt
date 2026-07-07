@@ -1,0 +1,7 @@
+# Core dependencies untuk MegaSyncInaproc.py
+selenium==4.15.2
+pandas==2.1.3
+webdriver-manager==4.0.1
+
+# Optional tapi recommended untuk CI/CD
+python-dotenv==1.0.0
