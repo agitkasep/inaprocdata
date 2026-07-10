@@ -252,7 +252,6 @@ function App() {
             <span style={{ fontSize: '28px' }}>📊</span>
             <div>
               <h3 style={{ margin: 0, fontSize: '15px', color: '#1e3a8a', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Paket Instansi Ini</h3>
-              
             </div>
           </div>
           <div style={{ fontSize: '32px', fontWeight: '900', color: '#1d4ed8', letterSpacing: '-1px' }}>
