@@ -246,6 +246,20 @@ function App() {
           </div>
         </div>
 
+        {/* INFO TOTAL PAKET */}
+        <div style={{ backgroundColor: '#eff6ff', padding: '16px 24px', borderRadius: '12px', borderLeft: '5px solid #3b82f6', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontSize: '28px' }}>📊</span>
+            <div>
+              <h3 style={{ margin: 0, fontSize: '15px', color: '#1e3a8a', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Paket Instansi Ini</h3>
+              <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#3b82f6', fontWeight: '500' }}>Cocokkan angka ini dengan Target Web di terminal Robot Python Anda.</p>
+            </div>
+          </div>
+          <div style={{ fontSize: '32px', fontWeight: '900', color: '#1d4ed8', letterSpacing: '-1px' }}>
+            {semuaData.length.toLocaleString('id-ID')} <span style={{ fontSize: '16px', fontWeight: '700', color: '#60a5fa', letterSpacing: '0' }}>Paket</span>
+          </div>
+        </div>
+
         {/* TABLE SECTION */}
         <div style={{ backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
           {loading ? (

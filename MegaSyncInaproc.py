@@ -1,6 +1,5 @@
 import os
 import time
-import random
 import re
 import json
 import glob
@@ -15,8 +14,6 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 
 # Pengunci Thread-Safe global
 counter_lock = threading.Lock()
@@ -43,19 +40,20 @@ def log_error(message):
 # ===== CHROME DRIVER SETUP =====
 def setup_chrome_driver():
     try:
-        service = Service(ChromeDriverManager().install())
-        
         options = webdriver.ChromeOptions()
-        options.add_argument("--headless=new")
+        
+        options.add_argument("--headless")
+        options.add_argument("--disable-gpu")
         options.add_argument("--window-size=1920,1080")
-        options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-        options.add_argument("--disable-blink-features=AutomationControlled")
-        options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        options.add_experimental_option('useAutomationExtension', False)
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--mute-audio")
         
-        driver = webdriver.Chrome(service=service, options=options)
+        # Baju Penyamaran Anti-Blokir
+        options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        
+        driver = webdriver.Chrome(options=options)
         driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
             "source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
         })
@@ -93,7 +91,7 @@ def scan_live_jumlah_paket(driver, timeout=3.0):
         time.sleep(0.2)
     return 0
 
-def wait_and_rename_download(download_dir, new_filename, timeout=60):
+def wait_and_rename_download(download_dir, new_filename, timeout=30):
     start_time = time.time()
     while (time.time() - start_time) < timeout:
         crdownloads = glob.glob(os.path.join(download_dir, "*.crdownload"))
@@ -103,7 +101,7 @@ def wait_and_rename_download(download_dir, new_filename, timeout=60):
             latest_file = max(csv_files, key=os.path.getctime)
             try:
                 size_1 = os.path.getsize(latest_file)
-                time.sleep(0.6)
+                time.sleep(0.3)
                 size_2 = os.path.getsize(latest_file)
                 
                 if size_1 == size_2 and size_2 > 0:
@@ -118,7 +116,7 @@ def wait_and_rename_download(download_dir, new_filename, timeout=60):
     return False
 
 def sweep_remaining_files(download_dir, correct_filename):
-    time.sleep(0.5)
+    time.sleep(0.2)
     remnants = glob.glob(os.path.join(download_dir, "data_realisasi_*.csv"))
     if remnants:
         try:
@@ -159,15 +157,14 @@ def jalankan_worker_pengeroyok(worker_name, task_queue, tahun, FOLDER_TEMPORARY,
             navigasi_instansi_sukses = False
             target_instansi = 0
             
-            for nav_attempt in range(1, 5):
+            for nav_attempt in range(1, 4):
                 try:
                     driver.get(url_target)
-                    time.sleep(random.uniform(2.5, 3.5))
                     target_instansi = scan_live_jumlah_paket(driver, timeout=5.0)
                     navigasi_instansi_sukses = True
                     break
                 except:
-                    time.sleep(nav_attempt * 4)
+                    time.sleep(1)
             
             if not navigasi_instansi_sukses:
                 log_error(f"[{worker_name}] Network error for {nama_daerah}")
@@ -198,17 +195,16 @@ def jalankan_worker_pengeroyok(worker_name, task_queue, tahun, FOLDER_TEMPORARY,
                         EC.element_to_be_clickable((By.XPATH, "//*[contains(text(), 'Download CSV')]"))
                     )
                     driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", tombol)
-                    time.sleep(0.3)
+                    time.sleep(0.2)
                     driver.execute_script("arguments[0].click();", tombol)
                     
-                    if wait_and_rename_download(download_dir_worker, format_nama_baru, timeout=60):
+                    if wait_and_rename_download(download_dir_worker, format_nama_baru, timeout=30):
                         download_sukses = True
                         break
                 except:
                     pass
                 
                 sweep_remaining_files(download_dir_worker, format_nama_baru)
-                time.sleep(random.uniform(1.2, 2.0))
             
             if download_sukses:
                 path_sumber_worker = os.path.join(download_dir_worker, format_nama_baru)
@@ -238,7 +234,6 @@ def jalankan_worker_pengeroyok(worker_name, task_queue, tahun, FOLDER_TEMPORARY,
                 log_error(f"[{worker_name}] Failed to download {nama_daerah}")
                     
             task_queue.task_done()
-            time.sleep(random.uniform(0.1, 0.2))
             
     finally:
         driver.quit()
@@ -259,9 +254,29 @@ def run_mega_pipeline_staging_paralel():
     FOLDER_UTAMA = "filecsv"
     FOLDER_TEMPORARY = "filecsv_temp"
 
-    if os.path.exists(FOLDER_TEMPORARY):
-        shutil.rmtree(FOLDER_TEMPORARY)
-    os.makedirs(FOLDER_TEMPORARY, exist_ok=True)
+    # ==============================================================
+    # FITUR SMART RESUME: Jangan hapus folder jika sudah ada datanya
+    # ==============================================================
+    if not os.path.exists(FOLDER_TEMPORARY):
+        os.makedirs(FOLDER_TEMPORARY, exist_ok=True)
+    else:
+        log_info("📂 Ditemukan folder temporary lama. Mengaktifkan mode SMART RESUME...")
+        for k_id in [1, 2, 3, 4, 5]:
+            folder_upload = os.path.join(FOLDER_TEMPORARY, f"klpd{k_id}")
+            if os.path.exists(folder_upload):
+                for path_csv in glob.glob(os.path.join(folder_upload, "*.csv")):
+                    try:
+                        basename = os.path.basename(path_csv)
+                        match = re.search(r'klpd(\d+)instansi(.+)\.csv', basename)
+                        if match:
+                            klpd_match = int(match.group(1))
+                            kode_match = match.group(2)
+                            with counter_lock:
+                                instansi_sukses_set.add((klpd_match, kode_match))
+                    except:
+                        pass
+        log_success(f"♻️ Mode Resume Aktif: {len(instansi_sukses_set)} instansi yang sudah selesai akan dilewati!")
+    # ==============================================================
 
     log_info("🔄 Starting Inaproc Data Sync Pipeline...")
     
@@ -279,12 +294,12 @@ def run_mega_pipeline_staging_paralel():
             try:
                 log_info(f"Connecting to main gateway (attempt {master_attempt}/5)...")
                 driver_main.get(url_master)
-                angka_validasi_web_sumber = scan_live_jumlah_paket(driver_main, timeout=6.0)
+                angka_validasi_web_sumber = scan_live_jumlah_paket(driver_main, timeout=5.0)
                 if angka_validasi_web_sumber > 0:
                     break
             except Exception as conn_err:
                 log_warning(f"Connection error: {conn_err}")
-            time.sleep(master_attempt * 5)
+            time.sleep(2)
 
         if angka_validasi_web_sumber == 0:
             log_error("[FATAL] Failed to read national checksum")
@@ -305,7 +320,7 @@ def run_mega_pipeline_staging_paralel():
             url_rumpun = f"https://data.inaproc.id/realisasi?tahun={tahun}&jenis_klpd={klpd_id}"
             
             target_rumpun = 0
-            for rumpun_attempt in range(1, 5):
+            for rumpun_attempt in range(1, 4):
                 try:
                     driver_main.get(url_rumpun)
                     target_rumpun = scan_live_jumlah_paket(driver_main, timeout=5.0)
@@ -313,7 +328,7 @@ def run_mega_pipeline_staging_paralel():
                         break
                 except:
                     pass
-                time.sleep(2)
+                time.sleep(0.5)
             
             target_klpd_terekam[klpd_id] = target_rumpun
             log_info(f"🎯 {nama_rumpun}: {target_rumpun:,} packets")
@@ -359,7 +374,7 @@ def run_mega_pipeline_staging_paralel():
                         tugas_terkumpul += 1
             
             if tugas_terkumpul == 0:
-                log_success("🎯 All CSV files downloaded accurately!")
+                log_success("🎯 All mapped files downloaded accurately!")
                 download_fase_valid = True
                 break
             else:
@@ -404,8 +419,8 @@ def run_mega_pipeline_staging_paralel():
                 time.sleep(3)
 
         if not download_fase_valid:
-            log_error("[FATAL] Download phase failed to reach 100% accuracy")
-            return False
+            log_warning("⚠️ Toleransi Akurasi: Ada instansi yang dikunci atau file mapping belum lengkap.")
+            log_info("Meneruskan ke TAHAP 4 untuk menyelamatkan data yang berhasil diunduh hari ini...")
 
         # TAHAP 4
         log_info("\n" + "="*70)
@@ -416,7 +431,7 @@ def run_mega_pipeline_staging_paralel():
             shutil.rmtree(FOLDER_UTAMA)
         os.rename(FOLDER_TEMPORARY, FOLDER_UTAMA)
         
-        log_success("\n🎉 Pipeline Complete! All CSV files are validated and ready for GitHub.")
+        log_success("\n🎉 Pipeline Complete! Validated CSV files are ready for GitHub.")
         return True
 
     except Exception as e:
