@@ -431,13 +431,26 @@ def run_mega_pipeline_staging_paralel():
             shutil.rmtree(FOLDER_UTAMA)
         os.rename(FOLDER_TEMPORARY, FOLDER_UTAMA)
         
-        log_success("\n🎉 Pipeline Complete! Validated CSV files are ready for GitHub.")
+        # --- FITUR AUTO-PUSH KE GITHUB ---
+        log_info("🚀 Mengirim data ke GitHub secara otomatis...")
+        try:
+            import subprocess
+            subprocess.run(["git", "add", "."], check=True)
+            subprocess.run(["git", "commit", "-m", "Auto-update CSV by Robot"], check=True)
+            subprocess.run(["git", "push"], check=True)
+            log_success("✅ Data berhasil terkirim ke GitHub dan Website sedang diperbarui!")
+        except Exception as e:
+            log_error(f"❌ Gagal mengirim ke GitHub: {e}. Silakan lakukan git push manual.")
+        # ---------------------------------
+        
+        log_success("\n🎉 Pipeline Complete! Seluruh proses selesai.")
         return True
 
     except Exception as e:
         log_error(f"Fatal error: {e}")
         return False
 
+# BLOK PENUTUP (HARUS SELALU BERADA DI PALING BAWAH FILE)
 if __name__ == "__main__":
     try:
         success = run_mega_pipeline_staging_paralel()
