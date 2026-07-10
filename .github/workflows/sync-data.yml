@@ -2,14 +2,14 @@ name: 🤖 Run Inaproc Sync Robot
 
 on:
   schedule:
-    - cron: '0 18 * * *' # Jam 01:00 WIB (GitHub menggunakan UTC, 18:00 UTC = 01:00 WIB)
-  workflow_dispatch: # Agar bisa dijalankan manual lewat tombol di GitHub jika perlu
+    - cron: '0 18 * * *' # Jam 01:00 WIB (18:00 UTC)
+  workflow_dispatch: 
 
 jobs:
   run-robot:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # PENTING: Agar Action punya hak akses untuk push CSV baru
+      contents: write 
     
     steps:
       - name: 📥 Checkout repository
@@ -20,15 +20,13 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: 📦 Install dependencies
-        run: pip install -r requirements.txt
+      - name: 📦 Install dependencies (Langsung sebutkan modulnya)
+        run: pip install pandas selenium
 
-      - name: 🔨 Run Robot
-        run: python MegaSyncInaproc.py
-
-      - name: 🚀 Commit & Push changes
+      - name: ⚙️ Konfigurasi Identitas Git
         run: |
-          git config --global user.name 'Inaproc Bot'
-          git config --global user.email 'bot@agitstudio.cloud'
-          git add filecsv/
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-update: Data Inaproc" && git push)
+          git config --global user.name "Inaproc Bot"
+          git config --global user.email "bot@agitstudio.cloud"
+
+      - name: 🔨 Run Robot (Otomatis Push di TAHAP 4)
+        run: python MegaSyncInaproc.py

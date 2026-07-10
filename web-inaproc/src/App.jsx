@@ -166,12 +166,12 @@ function App() {
   const formatTanggal = waktu.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const formatJam = waktu.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-  // CSS KHUSUS UNTUK KOLOM TEKS PANJANG (Agar bisa turun baris dan lebarnya pas)
+  // CSS KHUSUS UNTUK KOLOM TEKS PANJANG
   const styleKolomTeks = {
     padding: '14px 16px',
-    whiteSpace: 'normal', // Mengizinkan teks turun ke bawah
-    minWidth: '180px',    // Lebar minimal
-    maxWidth: '280px',    // Lebar maksimal agar tidak melebar terus
+    whiteSpace: 'normal', 
+    minWidth: '180px',    
+    maxWidth: '280px',    
     wordWrap: 'break-word',
     lineHeight: '1.4'
   };
@@ -188,7 +188,16 @@ function App() {
           <p style={{ margin: '4px 0 0 0', color: '#dcfce7', fontSize: '13px', fontWeight: '500' }}>
             {formatTanggal} | {formatJam} WIB
           </p>
+          
+          {/* INFO JUMLAH PAKET NASIONAL (TAMBAHAN BARU) */}
+          <div style={{ marginTop: '10px', display: 'inline-flex', alignItems: 'center', gap: '8px', backgroundColor: 'rgba(255, 255, 255, 0.15)', padding: '5px 14px', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.3)' }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fde047" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+            <span style={{ color: '#ffffff', fontSize: '13.5px', fontWeight: '600' }}>
+              Jumlah Paket: <span style={{ color: '#fde047', fontWeight: 'bold', fontSize: '14.5px', marginLeft: '2px' }}>1.411.477</span>
+            </span>
+          </div>
         </div>
+        
         <input
           type="text"
           placeholder="🔍 Pencarian pintar..."
@@ -267,7 +276,6 @@ function App() {
             </div>
           ) : (
             <div style={{ overflowX: "auto" }}>
-              {/* NOTE: whiteSpace 'nowrap' dihapus dari table agar bisa di-override */}
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', whiteSpace: 'nowrap' }}>
@@ -294,30 +302,20 @@ function App() {
                   ) : (
                     dataPage.map((item, i) => (
                       <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
-                        {/* Kolom yang isinya pendek / angka (whiteSpace: nowrap) */}
                         <td style={{ padding: '14px 16px', color: '#64748b', whiteSpace: 'nowrap' }}>{((page - 1) * perPage) + i + 1}</td>
-                        
-                        {/* Kolom Teks Panjang (Menggunakan styleKolomTeks) */}
                         <td style={{ ...styleKolomTeks, fontWeight: '500' }}>{item?.nama_instansi || '-'}</td>
                         <td style={styleKolomTeks}>{item?.nama_satuan_kerja || item?.satuan_kerja || item?.satker || '-'}</td>
-                        
                         <td style={{ padding: '14px 16px', color: '#2563eb', whiteSpace: 'nowrap' }}>{item?.kode_paket || '-'}</td>
                         <td style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>{item?.kode_rup || '-'}</td>
                         <td style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>{item?.tahun_anggaran || item?.tahun || '-'}</td>
                         <td style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>{item?.sumber_transaksi || '-'}</td>
                         <td style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>{item?.sumber_dana || '-'}</td>
-                        
-                        {/* Kolom Teks Panjang */}
                         <td style={styleKolomTeks}>{item?.nama_penyedia || item?.penyedia || '-'}</td>
-                        
                         <td style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>
                           <span style={{ padding: '4px 8px', backgroundColor: '#e2e8f0', borderRadius: '4px', fontSize: '11px', fontWeight: '600' }}>{item?.metode_pengadaan || item?.metode || '-'}</span>
                         </td>
                         <td style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>{item?.jenis_pengadaan || item?.jenis || '-'}</td>
-                        
-                        {/* Kolom Nama Paket (Bisa lebih lebar) */}
                         <td style={{ ...styleKolomTeks, minWidth: '250px', maxWidth: '350px' }}>{item?.nama_paket || item?.paket || '-'}</td>
-                        
                         <td style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>
                           <span style={{ padding: '4px 8px', backgroundColor: '#dcfce7', color: '#166534', borderRadius: '4px', fontSize: '11px', fontWeight: '600' }}>{item?.status_paket || item?.status || '-'}</span>
                         </td>
@@ -331,7 +329,7 @@ function App() {
             </div>
           )}
 
-          {/* PAGINATION & LOMPAT HALAMAN FOOTER */}
+          {/* PAGINATION */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderTop: '1px solid #e2e8f0', backgroundColor: '#f8fafc', flexWrap: 'wrap', gap: '15px' }}>
             <div style={{ fontSize: '14px', color: '#64748b' }}>
               Menampilkan {totalItem === 0 ? 0 : ((page - 1) * perPage) + 1} – {Math.min(page * perPage, totalItem)} dari {totalItem.toLocaleString('id-ID')} data
